@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HemoPulse — Multi-Hospital Predictive Emergency Blood Shortage Platform</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Command Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="24" height="24" fill="none">
+            <path d="M16 3C16 3 7 13.2 7 19.5C7 24.47 11.03 28.5 16 28.5C20.97 28.5 25 24.47 25 19.5C25 13.2 16 3 16 3Z" stroke="currentColor" stroke-width="2.2" fill="rgba(239,68,68,0.22)"/>
+            <path d="M10.5 20H13.5L15 16.5L17.5 23L19.5 19H21.5" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1>HemoPulse <span class="badge-live"><span class="pulse-dot"></span>MULTI-HOSPITAL NETWORK</span></h1>
+          <p class="subtitle">Multi-Hospital Predictive Blood Shortage Network, Consumption History &amp; Emergency Dispatch</p>
+        </div>
+      </div>
+
+      <div class="topbar-controls">
+        <div class="control-group">
+          <label for="portalSelect">Hospital Workspace</label>
+          <select id="portalSelect" aria-label="Select Hospital Workspace"></select>
+        </div>
+        <div class="control-group">
+          <label for="patternSelect">Demand Pattern</label>
+          <select id="patternSelect" aria-label="Emergency Demand Pattern"></select>
+        </div>
+        <div class="control-group">
+          <label for="scenarioSelect">Simulation Scenario</label>
+          <select id="scenarioSelect" aria-label="Simulation Scenario"></select>
+        </div>
+        <div class="control-group">
+          <label for="horizonSelect">Prediction Horizon</label>
+          <select id="horizonSelect" aria-label="Prediction Horizon">
+            <option value="12">12 Hours</option>
+            <option value="24">24 Hours</option>
+            <option value="48" selected>48 Hours</option>
+            <option value="72">72 Hours</option>
+          </select>
+        </div>
+        <button id="btnReportEmergency" class="btn btn-danger" type="button">
+          + Emergency Need
+        </button>
+        <button id="btnLogConsumption" class="btn btn-primary" type="button">
+          + Log Consumption
+        </button>
+        <button id="btnAddHospital" class="btn btn-secondary" type="button">
+          + Add Hospital
+        </button>
+        <button id="btnExportReport" class="btn btn-secondary" type="button" title="Export network predictions, consumption history &amp; emergencies as JSON">
+          Export
+        </button>
+        <button id="btnResetNetwork" class="btn btn-ghost" type="button" title="Restore baseline telemetry">
+          Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- Scenario & Portal Context Banner -->
+    <div id="scenarioBanner" class="scenario-banner" role="status"></div>
+
+    <!-- KPI Strip -->
+    <section class="kpi-grid" aria-label="Network Predictive Summary">
+      <article class="kpi-card">
+        <span class="kpi-label">Active Emergencies</span>
+        <strong id="kpiEmergencies" class="kpi-value text-danger">0</strong>
+        <span id="kpiEmergenciesSub" class="kpi-sub">Needs awaiting fulfillment</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Critical Shortage Alerts</span>
+        <strong id="kpiCriticalCells" class="kpi-value text-amber">0</strong>
+        <span id="kpiCriticalSub" class="kpi-sub">Hospital-type pairs at Code Red</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Connected Hospitals</span>
+        <strong id="kpiHospitalsCount" class="kpi-value text-cyan">0</strong>
+        <span id="kpiHospitalsSub" class="kpi-sub">Total blood reserve across network</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">7-Day Consumption</span>
+        <strong id="kpiSevenDayConsumed" class="kpi-value">0 u</strong>
+        <span id="kpiSevenDaySub" class="kpi-sub">Drives predictive burn velocity</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Earliest Projected Stockout</span>
+        <strong id="kpiEarliestStockout" class="kpi-value text-danger">—</strong>
+        <span id="kpiEarliestSub" class="kpi-sub">Highest-urgency predicted facility</span>
+      </article>
+    </section>
+
+    <!-- Multi-Hospital Portal Directory Strip -->
+    <section class="panel hospitals-panel" aria-label="Connected Multi-Hospital Directory">
+      <div class="panel-header">
+        <div>
+          <h2>Multi-Hospital Network Directory</h2>
+          <p class="panel-sub">Select any hospital portal to focus predictions, consumption history, emergency needs, and peer-to-peer transfers.</p>
+        </div>
+        <button id="btnViewAllHospitals" class="btn btn-ghost btn-xs" type="button">View All Network Command</button>
+      </div>
+      <div id="hospitalCardsGrid" class="hospital-cards-grid"></div>
+    </section>
+
+    <!-- Blood Type Filter Bar -->
+    <section class="filter-bar" aria-label="Blood Type Filter">
+      <div class="filter-bar-left">
+        <span class="filter-title">Blood Type Lens:</span>
+        <div id="bloodTypePills" class="pill-group" role="tablist" aria-label="Filter by blood type"></div>
+      </div>
+      <div id="compatibilityStrip" class="compat-strip"></div>
+    </section>
+
+    <!-- Main Analytical Grid: Network Topology + Forecast Curve / Inspector -->
+    <main class="main-grid">
+      <section class="panel topology-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Predictive Shortage Topology &amp; Need Locations</h2>
+            <p class="panel-sub">Click any hospital node or emergency pin to inspect stockout curves, contact details, and optimal transfer corridors.</p>
+          </div>
+          <div class="legend">
+            <span><i class="dot dot-critical"></i> Critical</span>
+            <span><i class="dot dot-high"></i> High</span>
+            <span><i class="dot dot-watch"></i> Watch</span>
+            <span><i class="dot dot-stable"></i> Stable</span>
+            <span><i class="pin-legend"></i> Emergency Need</span>
+          </div>
+        </div>
+        <div class="map-wrapper">
+          <svg id="networkSvg" viewBox="0 0 1000 580" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Multi-Hospital Blood Shortage Prediction Network Graph"></svg>
+          <div id="mapHint" class="map-hint">Tip: Select a blood type or hospital portal above to isolate corridors and shortages.</div>
+        </div>
+      </section>
+
+      <aside class="side-column">
+        <section class="panel forecast-panel">
+          <div class="panel-header">
+            <div>
+              <h2 id="forecastTitle">Shortage Forecast Curve</h2>
+              <p id="forecastSubtitle" class="panel-sub">Projected inventory calibrated from 7-day consumption history</p>
+            </div>
+            <span id="forecastRiskBadge" class="risk-pill risk-stable">STABLE</span>
+          </div>
+          <div class="chart-wrapper">
+            <svg id="forecastSvg" viewBox="0 0 540 230" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Predicted Inventory Trajectory Chart"></svg>
+          </div>
+          <div id="forecastMetrics" class="forecast-metrics"></div>
+          <ul id="forecastFactors" class="factor-list"></ul>
+        </section>
+
+        <section class="panel inspector-panel">
+          <div class="panel-header">
+            <div>
+              <h2 id="inspectorTitle">Hospital &amp; Contact Inspector</h2>
+              <p id="inspectorSubtitle" class="panel-sub">Verified 24/7 dispatch contact &amp; facility inventory</p>
+            </div>
+          </div>
+          <div id="inspectorBody" class="inspector-body"></div>
+        </section>
+      </aside>
+    </main>
+
+    <!-- Consumption History Analytics & Ledger -->
+    <section class="consumption-grid" aria-label="Consumption History and Transfusion Analytics">
+      <section class="panel consumption-chart-panel">
+        <div class="panel-header">
+          <div>
+            <h2 id="consumptionChartTitle">7-Day Blood Consumption History</h2>
+            <p id="consumptionChartSub" class="panel-sub">Historical daily units transfused used to calibrate predictive burn velocity</p>
+          </div>
+          <button id="btnQuickLogConsumption" class="btn btn-secondary btn-xs" type="button">+ Record Transfusion</button>
+        </div>
+        <div class="chart-wrapper">
+          <svg id="consumptionSvg" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet" role="img" aria-label="7-Day Blood Consumption History Chart"></svg>
+        </div>
+        <div id="consumptionMetrics" class="forecast-metrics"></div>
+      </section>
+
+      <section class="panel consumption-ledger-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Hospital Consumption History Ledger</h2>
+            <p class="panel-sub">Recent transfusions &amp; blood utilization events across connected hospitals</p>
+          </div>
+          <input id="consumptionSearch" type="search" placeholder="Filter hospital, blood type, dept..." aria-label="Filter consumption ledger">
+        </div>
+        <div class="table-scroll ledger-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Hospital</th>
+                <th>Blood Type</th>
+                <th>Units</th>
+                <th>Department &amp; Case</th>
+                <th>Recorded By</th>
+              </tr>
+            </thead>
+            <tbody id="consumptionTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- Emergency Demand Patterns Modeling & Surge Waves -->
+    <section class="panel patterns-panel" id="patternsPanel" aria-label="Emergency Demand Patterns">
+      <div class="panel-header">
+        <div>
+          <h2>Emergency Demand Patterns &amp; Surge Wave Modeling</h2>
+          <p class="panel-sub">Compare clinical surge waves (Weekend Trauma, Obstetric Hemorrhage, Outbreak Plateau, MCI Shockwave, Pediatric Cycle) and apply them to shortage forecasts.</p>
+        </div>
+        <div class="table-controls">
+          <button id="btnCustomPattern" class="btn btn-secondary btn-xs" type="button">+ Custom Demand Pattern</button>
+        </div>
+      </div>
+      <div class="patterns-layout">
+        <div id="patternCardsGrid" class="pattern-cards-grid"></div>
+        <div class="pattern-chart-box">
+          <div class="pattern-chart-head">
+            <div>
+              <strong id="patternCurveTitle">Hourly Emergency Demand Wave (0–48h)</strong>
+              <span id="patternCurveSub" class="subline">Active pattern demand rate (units/hr) vs. steady clinical baseline</span>
+            </div>
+            <span id="patternPeakBadge" class="risk-pill risk-watch">PEAK —</span>
+          </div>
+          <div class="chart-wrapper">
+            <svg id="patternCurveSvg" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Emergency Demand Pattern Wave Chart"></svg>
+          </div>
+          <div id="patternMetrics" class="forecast-metrics"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visual Analytics Suite: Supply vs Demand, Multi-Hospital Comparison, ABO/Rh Flow -->
+    <section class="viz-grid" id="visualizationsPanel" aria-label="Visual Analytics Suite">
+      <article class="panel viz-card">
+        <div class="panel-header">
+          <div>
+            <h2>Blood Type Supply vs. Projected Demand</h2>
+            <p id="bloodBalanceSub" class="panel-sub">On-hand reserve vs. horizon demand across all 8 ABO/Rh blood types (click bars to filter)</p>
+          </div>
+          <div class="viz-legend">
+            <span><i class="dot" style="background:#22d3ee"></i>Reserve</span>
+            <span><i class="dot" style="background:#f97316"></i>Demand</span>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <svg id="bloodBalanceSvg" viewBox="0 0 520 245" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Blood Type Supply vs Projected Demand Chart"></svg>
+        </div>
+      </article>
+
+      <article class="panel viz-card">
+        <div class="panel-header">
+          <div>
+            <h2>Multi-Hospital Stock &amp; Urgency Comparison</h2>
+            <p class="panel-sub">Ranked by shortage risk score — click any hospital bar to open its portal</p>
+          </div>
+          <div class="viz-legend">
+            <span><i class="dot dot-stable"></i>Stock</span>
+            <span><i class="dot dot-critical"></i>Emergency Req.</span>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <svg id="hospitalCompareSvg" viewBox="0 0 520 245" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Multi-Hospital Stock and Urgency Comparison Chart"></svg>
+        </div>
+      </article>
+
+      <article class="panel viz-card">
+        <div class="panel-header">
+          <div>
+            <h2>ABO/Rh Compatibility &amp; Donor Flow Graph</h2>
+            <p id="compatFlowSub" class="panel-sub">Safe RBC donor-to-recipient transfusion paths with live network surplus</p>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <svg id="compatFlowSvg" viewBox="0 0 520 245" preserveAspectRatio="xMidYMid meet" role="img" aria-label="ABO/Rh Compatibility Flow Visualization"></svg>
+        </div>
+      </article>
+    </section>
+
+    <!-- Active Emergency Needs Board (Blood Type, Emergency, Need Location, Contact, Dispatch) -->
+    <section class="panel emergencies-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Active Emergency Blood Needs &amp; Predictive Dispatch Board</h2>
+          <p class="panel-sub">Real-time emergency requests linked to blood type, emergency severity, need location, verified contact, and peer-hospital/hub routing.</p>
+        </div>
+        <div class="table-controls">
+          <input id="emergencySearch" type="search" placeholder="Search blood type, location, contact, ID..." aria-label="Search emergency needs">
+          <select id="severityFilter" aria-label="Filter by emergency severity">
+            <option value="all">All Severities</option>
+            <option value="critical">Code Red — Critical</option>
+            <option value="urgent">Code Amber — Urgent</option>
+            <option value="elevated">Watch — Elevated</option>
+            <option value="routine">Routine</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Blood Type</th>
+              <th>Emergency</th>
+              <th>Need Location</th>
+              <th>Contact</th>
+              <th>Recommended Predictive Dispatch</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="emergenciesTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Predictive Heatmap Matrix + Dispatch Log -->
+    <section class="bottom-grid">
+      <section class="panel matrix-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Multi-Hospital Shortage Risk Matrix (Facility &times; Blood Type)</h2>
+            <p class="panel-sub">Cell shows current units &amp; predicted hours-to-stockout. Click any cell to inspect its forecast.</p>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="matrix-table" id="riskMatrixTable"></table>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Dispatch &amp; Alert Activity Log</h2>
+            <p class="panel-sub">Audit trail of transfers, consumption events, donor alerts &amp; new hospitals</p>
+          </div>
+        </div>
+        <ul id="activityLog" class="activity-log"></ul>
+      </section>
+    </section>
+  </div>
+
+  <!-- Report Emergency Blood Need Modal -->
+  <div id="emergencyModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle">Report Emergency Blood Need</h2>
+          <p class="panel-sub">Injects live demand into the prediction network and computes optimal donor-hub dispatches.</p>
+        </div>
+        <button id="btnCloseModal" class="btn-icon" type="button" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="emergencyForm" class="modal-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="formBloodType">Blood Type *</label>
+            <select id="formBloodType" required></select>
+          </div>
+          <div class="form-field">
+            <label for="formUnits">Units Needed *</label>
+            <input id="formUnits" type="number" min="1" max="60" value="6" required>
+          </div>
+          <div class="form-field">
+            <label for="formSeverity">Emergency Severity *</label>
+            <select id="formSeverity" required>
+              <option value="critical">Code Red — Critical (Immediate MTP)</option>
+              <option value="urgent">Code Amber — Urgent (&lt; 90 min)</option>
+              <option value="elevated">Watch — Elevated (&lt; 4 hrs)</option>
+              <option value="routine">Routine Replenishment</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="formCategory">Emergency Type *</label>
+            <input id="formCategory" type="text" value="Acute Trauma / Hemorrhage" placeholder="e.g., Obstetric Hemorrhage, Cardiac Surgery" required>
+          </div>
+          <div class="form-field">
+            <label for="formComponent">Blood Component</label>
+            <select id="formComponent">
+              <option value="Packed RBC">Packed RBC</option>
+              <option value="Packed RBC (Irradiated)">Packed RBC (Irradiated)</option>
+              <option value="Whole Blood (Low Titer O)">Whole Blood (Low Titer O)</option>
+              <option value="Platelets (Apheresis)">Platelets (Apheresis)</option>
+              <option value="Fresh Frozen Plasma">Fresh Frozen Plasma</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="formFacilitySelect">Need Location Facility *</label>
+            <select id="formFacilitySelect" required></select>
+          </div>
+          <div class="form-field hidden" id="customLocationGroup">
+            <label for="formCustomFacility">Custom Location / Incident Site *</label>
+            <input id="formCustomFacility" type="text" placeholder="e.g., Sector 9 Field Triage / St. Jude Clinic">
+          </div>
+          <div class="form-field">
+            <label for="formWard">Ward / Exact Point of Care *</label>
+            <input id="formWard" type="text" value="Emergency Trauma Bay 1" placeholder="e.g., ICU Bed 4, OR-2, Mobile Triage" required>
+          </div>
+          <div class="form-field">
+            <label for="formZone">Zone / District *</label>
+            <input id="formZone" type="text" value="North Sector" required>
+          </div>
+          <div class="form-field form-field-wide">
+            <label for="formAddress">Street Address / Coordinates *</label>
+            <input id="formAddress" type="text" placeholder="Street address or highway marker" required>
+          </div>
+
+          <div class="form-divider form-field-wide">
+            <span>Emergency Contact Information</span>
+          </div>
+
+          <div class="form-field">
+            <label for="formContactName">Contact Person *</label>
+            <input id="formContactName" type="text" placeholder="Dr. / Coordinator Name" required>
+          </div>
+          <div class="form-field">
+            <label for="formContactRole">Role / Title</label>
+            <input id="formContactRole" type="text" placeholder="e.g., Trauma Blood Lead" value="On-Duty Blood Coordinator">
+          </div>
+          <div class="form-field">
+            <label for="formContactPhone">24/7 Hotline Phone *</label>
+            <input id="formContactPhone" type="tel" placeholder="+1-555-0100-911" required>
+          </div>
+          <div class="form-field">
+            <label for="formContactEmail">Dispatch Email *</label>
+            <input id="formContactEmail" type="email" placeholder="dispatch@hospital.org" required>
+          </div>
+          <div class="form-field">
+            <label for="formContactRadio">Radio / Pager Channel</label>
+            <input id="formContactRadio" type="text" placeholder="CH-04 / MED-STAT" value="CH-01 / STAT-NET">
+          </div>
+          <div class="form-field form-field-wide">
+            <label for="formNotes">Clinical / Logistics Notes</label>
+            <textarea id="formNotes" rows="2" placeholder="Cross-match status, cold-chain instructions, helicopter pad access..."></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="btnCancelModal" class="btn btn-ghost" type="button">Cancel</button>
+          <button class="btn btn-danger" type="submit">Broadcast Emergency &amp; Predict Routes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Log Consumption Event Modal -->
+  <div id="consumptionModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="consumptionModalTitle">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <div>
+          <h2 id="consumptionModalTitle">Log Hospital Blood Consumption</h2>
+          <p class="panel-sub">Deducts units from hospital inventory, updates 7-day consumption history, and recalibrates shortage predictions.</p>
+        </div>
+        <button id="btnCloseConsumptionModal" class="btn-icon" type="button" aria-label="Close consumption modal">&times;</button>
+      </div>
+      <form id="consumptionForm" class="modal-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="consHospitalSelect">Hospital / Facility *</label>
+            <select id="consHospitalSelect" required></select>
+          </div>
+          <div class="form-field">
+            <label for="consBloodType">Blood Type *</label>
+            <select id="consBloodType" required></select>
+          </div>
+          <div class="form-field">
+            <label for="consUnits">Units Consumed *</label>
+            <input id="consUnits" type="number" min="1" max="40" value="2" required>
+          </div>
+          <div class="form-field">
+            <label for="consDepartment">Department / Ward *</label>
+            <input id="consDepartment" type="text" value="Trauma OR-2" required>
+          </div>
+          <div class="form-field">
+            <label for="consCategory">Clinical Case / Indication *</label>
+            <input id="consCategory" type="text" value="Emergency Surgical Transfusion" required>
+          </div>
+          <div class="form-field">
+            <label for="consRecordedBy">Recorded By (Staff / Contact) *</label>
+            <input id="consRecordedBy" type="text" value="On-Duty Transfusion Resident" required>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="btnCancelConsumptionModal" class="btn btn-ghost" type="button">Cancel</button>
+          <button class="btn btn-primary" type="submit">Record Consumption &amp; Update Forecast</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Register New Hospital Modal -->
+  <div id="hospitalModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="hospitalModalTitle">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <div>
+          <h2 id="hospitalModalTitle">Register Hospital onto Platform</h2>
+          <p class="panel-sub">Connects a new hospital with live blood inventory, consumption history baseline, and 24/7 dispatch contact.</p>
+        </div>
+        <button id="btnCloseHospitalModal" class="btn-icon" type="button" aria-label="Close hospital modal">&times;</button>
+      </div>
+      <form id="hospitalForm" class="modal-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="hospName">Hospital Name *</label>
+            <input id="hospName" type="text" placeholder="e.g., Riverside Memorial Hospital" required>
+          </div>
+          <div class="form-field">
+            <label for="hospTier">Hospital Tier *</label>
+            <select id="hospTier" required>
+              <option value="Level-1 Trauma Hospital">Level-1 Trauma Hospital</option>
+              <option value="General Acute Hospital" selected>General Acute Hospital</option>
+              <option value="Cardiac &amp; Maternity Hospital">Cardiac &amp; Maternity Hospital</option>
+              <option value="Pediatric &amp; Oncology Specialty">Pediatric &amp; Oncology Specialty</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="hospBeds">Bed Capacity *</label>
+            <input id="hospBeds" type="number" min="20" max="2000" value="350" required>
+          </div>
+          <div class="form-field">
+            <label for="hospZone">Zone / District *</label>
+            <input id="hospZone" type="text" placeholder="e.g., Midtown East" required>
+          </div>
+          <div class="form-field form-field-wide">
+            <label for="hospAddress">Street Address *</label>
+            <input id="hospAddress" type="text" placeholder="e.g., 640 Riverwalk Blvd" required>
+          </div>
+          <div class="form-field">
+            <label for="hospReserveProfile">Starting Stock Profile *</label>
+            <select id="hospReserveProfile" required>
+              <option value="standard">Standard Hospital Reserve (~95 units)</option>
+              <option value="low">Low Stock Alert (~42 units)</option>
+              <option value="surplus">High Surplus Reserve (~155 units)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="hospContactName">Blood Bank Coordinator *</label>
+            <input id="hospContactName" type="text" placeholder="Dr. / Lead Name" required>
+          </div>
+          <div class="form-field">
+            <label for="hospContactPhone">24/7 Hotline Phone *</label>
+            <input id="hospContactPhone" type="tel" placeholder="+1-555-0199-500" required>
+          </div>
+          <div class="form-field">
+            <label for="hospContactEmail">Dispatch Email *</label>
+            <input id="hospContactEmail" type="email" placeholder="bloodbank@riverside.org" required>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="btnCancelHospitalModal" class="btn btn-ghost" type="button">Cancel</button>
+          <button class="btn btn-secondary" type="submit">Connect Hospital to Network</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Custom Emergency Demand Pattern Modal -->
+  <div id="patternModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="patternModalTitle">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <div>
+          <h2 id="patternModalTitle">Create Custom Emergency Demand Pattern</h2>
+          <p class="panel-sub">Define a temporal wave shape, peak multiplier, target blood types, and hospital tier affinity.</p>
+        </div>
+        <button id="btnClosePatternModal" class="btn-icon" type="button" aria-label="Close pattern modal">&times;</button>
+      </div>
+      <form id="patternForm" class="modal-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="patName">Pattern Name *</label>
+            <input id="patName" type="text" placeholder="e.g., Stadium Event Trauma Surge" required>
+          </div>
+          <div class="form-field">
+            <label for="patCategory">Pattern Category *</label>
+            <input id="patCategory" type="text" value="Custom Surge Pattern" required>
+          </div>
+          <div class="form-field">
+            <label for="patWaveShape">Temporal Wave Shape *</label>
+            <select id="patWaveShape" required>
+              <option value="impulse_decay">Immediate Impulse + Exponential Decay (0–12h)</option>
+              <option value="nocturnal_trauma_wave">Nocturnal / Evening Surge Wave</option>
+              <option value="daytime_clinic_wave">Daytime Scheduled Peak Wave</option>
+              <option value="sustained_plateau">Sustained Multi-Day Plateau</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="patTargetTier">Primary Hospital Tier *</label>
+            <select id="patTargetTier" required>
+              <option value="Level-1 Trauma Hospital">Level-1 Trauma Hospital</option>
+              <option value="Level-2 Trauma & Coastal Hospital">Level-2 Trauma &amp; Coastal Hospital</option>
+              <option value="Cardiac & Maternity Hospital">Cardiac &amp; Maternity Hospital</option>
+              <option value="Pediatric & Oncology Specialty">Pediatric &amp; Oncology Specialty</option>
+              <option value="Academic Teaching Hospital">Academic Teaching Hospital</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="patPrimaryBt">Primary Stressed Blood Type *</label>
+            <select id="patPrimaryBt" required>
+              <option value="O-">O-</option>
+              <option value="O+">O+</option>
+              <option value="A-">A-</option>
+              <option value="A+">A+</option>
+              <option value="B-">B-</option>
+              <option value="B+">B+</option>
+              <option value="AB-">AB-</option>
+              <option value="AB+">AB+</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="patPeakMult">Peak Demand Multiplier *</label>
+            <input id="patPeakMult" type="number" step="0.1" min="1.1" max="4.0" value="2.1" required>
+          </div>
+          <div class="form-field form-field-wide">
+            <label for="patDescription">Pattern Description</label>
+            <input id="patDescription" type="text" value="Custom localized emergency surge applied to predictive shortage curves.">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="btnCancelPatternModal" class="btn btn-ghost" type="button">Cancel</button>
+          <button class="btn btn-primary" type="submit">Apply Custom Pattern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script defer src="js/network-data.js"></script>
+  <script defer src="js/prediction-engine.js"></script>
+  <script defer src="js/app.js"></script>
+</body>
+</html>
