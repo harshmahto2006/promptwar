@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HemoPulse Automated Test Suite</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0b1220; color: #e2e8f0; padding: 24px; }
+    .pass { color: #34d399; }
+    .fail { color: #f87171; }
+    li { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <h1>HemoPulse Prediction Engine Tests</h1>
+  <div id="summary"></div>
+  <ul id="results"></ul>
+
+  <script src="../js/network-data.js"></script>
+  <script src="../js/prediction-engine.js"></script>
+  <script src="./prediction-tests.js"></script>
+  <script>
+    const results = window.HemoTestRunner.runAllTests();
+    const passed = results.filter(r => r.passed).length;
+    const summaryEl = document.getElementById('summary');
+    summaryEl.textContent = passed + ' / ' + results.length + ' tests passed';
+    summaryEl.className = passed === results.length ? 'pass' : 'fail';
+    document.getElementById('results').innerHTML = results.map(r =>
+      '<li class="' + (r.passed ? 'pass' : 'fail') + '">' +
+      (r.passed ? 'PASS: ' : 'FAIL: ') + r.name +
+      (r.error ? ' (' + r.error + ')' : '') +
+      '</li>'
+    ).join('');
+  </script>
+</body>
+</html>
